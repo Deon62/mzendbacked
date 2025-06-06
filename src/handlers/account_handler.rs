@@ -10,13 +10,12 @@ pub struct AccountHandler {
 }
 
 impl AccountHandler {
-    pub fn new() -> Self {
-        Self {
-            user_service: UserService::new(),
-        }
+    pub async fn new() -> Result<Self> {
+        let user_service = UserService::new().await?;
+        Ok(Self { user_service })
     }
 
-    pub fn create_account_interactive(&self) -> Result<()> {
+    pub async fn create_account_interactive(&self) -> Result<()> {
         CLI::print_header();
         CLI::print_info("Let's create your Stellar Wallet account!");
         println!();
@@ -109,7 +108,7 @@ impl AccountHandler {
             password,
         };
 
-        match self.user_service.create_user(create_request) {
+        match self.user_service.create_user(create_request).await {
             Ok(user) => {
                 println!();
                 CLI::print_success("🎉 Account created successfully!");
@@ -121,7 +120,7 @@ impl AccountHandler {
                 println!("📅 Created: {}", user.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
                 println!("✉️  Verification Status: {}", if user.is_verified { "Verified" } else { "Pending" });
                 println!();
-                CLI::print_info("Your account has been created! You can now proceed to connect your Stellar wallet.");
+                CLI::print_info("Your account has been saved to the database!");
             }
             Err(e) => {
                 CLI::print_error(&format!("Failed to create account: {}", e));
@@ -129,6 +128,65 @@ impl AccountHandler {
             }
         }
 
+        Ok(())
+    }
+
+    pub async fn login_interactive(&self) -> Result<()> {
+        CLI::print_header();
+        CLI::print_info("Welcome back! Please log in to your account.");
+        println!();
+
+        // Get email or username
+        let identifier = loop {
+            let input = CLI::get_input("📧 Enter your email or username:")?;
+            
+            if input.is_empty() {
+                CLI::print_error("Email/username cannot be empty");
+                continue;
+            }
+            
+            break input;
+        };
+
+        // Get password
+        let password = CLI::get_password("🔒 Enter your password:")?;
+
+        if password.is_empty() {
+            CLI::print_error("Password cannot be empty");
+            return Ok(());
+        }
+
+        // Attempt login
+        match self.user_service.authenticate_user(&identifier, &password).await {
+            Ok(user) => {
+                println!();
+                CLI::print_success("🎉 Login successful!");
+                println!();
+                println!("{}", "Welcome back!".green().bold());
+                println!("👤 Username: {}", user.username);
+                println!("📧 Email: {}", user.email);
+                println!("📅 Last login: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+                println!();
+                
+                CLI::print_info("Login feature completed! Dashboard coming soon...");
+            }
+            Err(e) => {
+                CLI::print_error(&format!("Login failed: {}", e));
+                return Err(e);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn show_stats(&self) -> Result<()> {
+        let user_count = self.user_service.get_user_count().await?;
+        
+        println!();
+        println!("{}", "📊 Database Statistics:".cyan().bold());
+        println!("👥 Total Users: {}", user_count);
+        println!();
+        
         Ok(())
     }
 }
